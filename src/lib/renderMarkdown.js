@@ -82,32 +82,40 @@ function makeRenderer(theme) {
   const renderer = new marked.Renderer()
   const renderInline = (tokens = []) => Parser.parseInline(tokens, { renderer })
 
+  // WeChat treats `span[leaf]` as an atomic text node. A leaf must contain
+  // text only; wrapping rendered inline HTML in a leaf causes paste cleanup
+  // to discard nested emphasis styles.
+  renderer.text = ({ text }) => leaf(esc(text))
+
   renderer.heading = ({ tokens, depth }) => {
     const content = renderInline(tokens)
-    if (depth === 1) return `<h1 style="${s.h1}">${leaf(content)}</h1>`
+    if (depth === 1) return `<h1 style="${s.h1}">${content}</h1>`
     if (depth === 2) {
       h2Index += 1
       const numbering = theme.layoutConfig?.numbering
       const customPrefix = numbering === 'decimal' ? `${String(h2Index).padStart(2, '0')} / ` : numbering === 'chapter' ? `第${['一','二','三','四','五','六','七','八','九','十'][h2Index - 1] || h2Index}章 · ` : numbering === 'no' ? `NO.${String(h2Index).padStart(2, '0')} ` : ''
       const prefix = theme.layoutConfig ? customPrefix : layout === 'zen-whitespace' ? '— ' : layout === 'red-white' ? `${String(h2Index).padStart(2, '0')} / ` : layout === 'moyu-ticket' ? `NO.${String(h2Index).padStart(2, '0')} ` : ''
-      return `<h2 style="${s.h2}">${leaf(prefix + content)}</h2>`
+      return `<h2 style="${s.h2}">${prefix ? leaf(prefix) : ''}${content}</h2>`
     }
-    return `<h3 style="${s.h3}">${leaf(content)}</h3>`
+    return `<h3 style="${s.h3}">${content}</h3>`
   }
-  renderer.paragraph = ({ tokens }) => `<p style="${s.p}">${leaf(renderInline(tokens))}</p>`
-  renderer.blockquote = ({ text }) => `<blockquote style="${s.quote}">${leaf(text.replace(/^<p[^>]*>|<\/p>$/g, ''))}</blockquote>`
-  renderer.code = ({ text, lang }) => `<pre style="${s.code}"><code>${leaf(lang ? `<span style="color:${theme.accentSoft};">${esc(lang)}</span>\n${esc(text)}` : esc(text))}</code></pre>`
+  renderer.paragraph = ({ tokens }) => `<p style="${s.p}">${renderInline(tokens)}</p>`
+  renderer.blockquote = ({ tokens }) => {
+    const content = tokens.map((token) => token.type === 'paragraph' ? renderInline(token.tokens) : marked.parser([token], { renderer })).join('')
+    return `<blockquote style="${s.quote}">${content}</blockquote>`
+  }
+  renderer.code = ({ text, lang }) => `<pre style="${s.code}"><code>${lang ? `<span style="color:${theme.accentSoft};">${leaf(esc(lang))}</span><br/>` : ''}${leaf(esc(text))}</code></pre>`
   renderer.codespan = ({ text }) => `<code style="${s.inlineCode}">${leaf(esc(text))}</code>`
-  renderer.strong = ({ tokens }) => `<strong style="${s.strong}">${leaf(renderInline(tokens))}</strong>`
-  renderer.em = ({ tokens }) => `<em style="font-style:italic;color:${theme.muted};">${leaf(renderInline(tokens))}</em>`
-  renderer.del = ({ tokens }) => `<s style="color:${theme.muted};text-decoration-color:${theme.accent};">${leaf(renderInline(tokens))}</s>`
-  renderer.link = ({ href, title, tokens }) => `<a href="${esc(href)}" style="${s.link}"${title ? ` title="${esc(title)}"` : ''}>${leaf(renderInline(tokens))}</a>`
+  renderer.strong = ({ tokens }) => `<span style="${s.strong}">${renderInline(tokens)}</span>`
+  renderer.em = ({ tokens }) => `<em style="font-style:italic;color:${theme.muted};">${renderInline(tokens)}</em>`
+  renderer.del = ({ tokens }) => `<s style="color:${theme.muted};text-decoration-color:${theme.accent};">${renderInline(tokens)}</s>`
+  renderer.link = ({ href, title, tokens }) => `<a href="${esc(href)}" style="${s.link}"${title ? ` title="${esc(title)}"` : ''}>${renderInline(tokens)}</a>`
   renderer.image = ({ href, title, text }) => `<figure style="margin:28px 0;"><img src="${esc(href)}" alt="${esc(text)}" style="display:block;width:100%;height:auto;border-radius:${theme.radius};"${title ? ` title="${esc(title)}"` : ''}/>${text ? `<figcaption style="margin-top:9px;text-align:center;color:${theme.muted};font-size:12px;">${leaf(esc(text))}</figcaption>` : ''}</figure>`
   renderer.list = ({ ordered, items, start }) => `<${ordered ? 'ol' : 'ul'} style="${s.list}"${ordered && start !== 1 ? ` start="${start}"` : ''}>${items.map((item) => renderer.listitem(item)).join('')}</${ordered ? 'ol' : 'ul'}>`
   renderer.listitem = ({ tokens, checked }) => {
     const content = tokens.map((token) => token.type === 'text' ? renderInline(token.tokens || [token]) : marked.parser([token], { renderer })).join('')
     const check = checked === true ? '☑ ' : checked === false ? '☐ ' : ''
-    return `<li style="${s.li}">${leaf(check + content)}</li>`
+    return `<li style="${s.li}">${check ? leaf(check) : ''}${content}</li>`
   }
   renderer.hr = () => `<section style="margin:38px auto;width:42px;border-top:3px solid ${theme.accent};font-size:0;line-height:0;">&nbsp;</section>`
   renderer.br = () => '<br/>'
