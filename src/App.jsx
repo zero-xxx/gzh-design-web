@@ -3,16 +3,20 @@ import {
   Check, Clipboard, Code2, Download, Eye, FileText,
   Heading1, Heading2, Image, Italic, List, ListOrdered,
   Maximize2, Minus, Moon, Quote, Redo2, RotateCcw, Smartphone,
-  Sparkles, Sun, Undo2, X, Plus, Palette,
+  Sparkles, Sun, Undo2, X, Plus, Palette, Highlighter, Underline,
+  Table2, Settings2, ShieldCheck, UserRound, BookOpen,
 } from 'lucide-react'
 import { defaultMarkdown, themes } from './lib/themes'
-import { renderMarkdown } from './lib/renderMarkdown'
+import { DEFAULT_OPTIONS, renderArticle } from './lib/renderMarkdown'
+import { getSkillStats } from './lib/skillSources'
 
 const STORAGE_KEY = 'gzh-design-draft-v1'
 const CUSTOM_THEMES_KEY = 'gzh-design-custom-themes-v1'
+const TYPESETTING_OPTIONS_KEY = 'gzh-design-typesetting-options-v2'
 const EMPTY_THEME_DRAFT = {
   name: '', description: '', accent: '#2563EB', text: '#1E293B', background: '#EFF6FF',
   titleStyle: 'editorial', sectionStyle: 'bar', numbering: 'decimal', quoteStyle: 'card', density: 'balanced',
+  sourceTheme: 'moyu-green',
 }
 const TEMPLATE_PREVIEW_MARKDOWN = `> 好的排版，让重要的内容自然被看见。
 
@@ -24,7 +28,15 @@ const TEMPLATE_PREVIEW_MARKDOWN = `> 好的排版，让重要的内容自然被�
 
 - 标题建立阅读地图
 - 引用突出核心观点
-- 细节决定最终质感`
+- 细节决定最终质感
+
+## 第二部分 · 真实组件
+
+==高亮文字== 与 ++关键下划线++ 都来自公众号兼容组件。
+
+## 写在最后
+
+完整的文章骨架包含目录、章节、正文标记和作者互动区。`
 
 const mixHex = (hex, target = '#ffffff', weight = 0.8) => {
   const clean = hex.replace('#', '')
@@ -72,6 +84,14 @@ function App() {
   const [zenMode, setZenMode] = useState(false)
   const [isDark, setIsDark] = useState(false)
   const [previewMode, setPreviewMode] = useState('phone')
+  const [showTypesettingSettings, setShowTypesettingSettings] = useState(false)
+  const [typesettingOptions, setTypesettingOptions] = useState(() => {
+    try {
+      return { ...DEFAULT_OPTIONS, ...JSON.parse(localStorage.getItem(TYPESETTING_OPTIONS_KEY) || '{}') }
+    } catch {
+      return DEFAULT_OPTIONS
+    }
+  })
   const [customThemes, setCustomThemes] = useState(() => {
     try { return JSON.parse(localStorage.getItem(CUSTOM_THEMES_KEY) || '[]') } catch { return [] }
   })
@@ -80,19 +100,26 @@ function App() {
   const [history, setHistory] = useState([markdown])
   const [historyIndex, setHistoryIndex] = useState(0)
   const textareaRef = useRef(null)
+  const imageInputRef = useRef(null)
+  const previewStageRef = useRef(null)
   const articleRef = useRef(null)
+  const scrollSyncRef = useRef({ target: null, frame: 0 })
 
   const allThemes = useMemo(() => [...themes, ...customThemes], [customThemes])
   const templateCards = useMemo(() => allThemes.map(decorateTheme), [allThemes])
   const theme = allThemes.find((item) => item.id === themeId) || themes[0]
-  const articleHtml = useMemo(() => renderMarkdown(markdown, theme), [markdown, theme])
+  const article = useMemo(() => renderArticle(markdown, theme, typesettingOptions), [markdown, theme, typesettingOptions])
+  const articleHtml = article.html
   const charCount = markdown.replace(/\s/g, '').length
   const readingMinutes = Math.max(1, Math.ceil(charCount / 500))
   const draftPreviewTheme = useMemo(() => ({
-    id: 'custom-preview', custom: true, layout: 'custom-independent', schemaVersion: 1,
+    id: 'custom-preview', custom: true, layout: 'custom-independent', schemaVersion: 2,
+    sourceTheme: themeDraft.sourceTheme,
     name: themeDraft.name || '未命名模板', code: 'NEW', description: themeDraft.description,
     accent: themeDraft.accent.toUpperCase(),
     accentSoft: mixHex(themeDraft.accent, '#ffffff', .68),
+    underline: `border-bottom:2px solid ${mixHex(themeDraft.accent, '#ffffff', .68)};font-weight:600;`,
+    highlight: mixHex(themeDraft.accent, '#ffffff', .78),
     tint: themeDraft.background.toUpperCase(),
     text: themeDraft.text.toUpperCase(),
     muted: mixHex(themeDraft.text, '#ffffff', .42),
@@ -105,16 +132,31 @@ function App() {
       numbering: themeDraft.numbering, quoteStyle: themeDraft.quoteStyle, density: themeDraft.density,
     },
   }), [themeDraft])
-  const draftPreviewHtml = useMemo(() => renderMarkdown(`# ${themeDraft.name || '一篇正在成形的文章'}\n\n${TEMPLATE_PREVIEW_MARKDOWN}`, draftPreviewTheme), [draftPreviewTheme, themeDraft.name])
+  const draftPreviewArticle = useMemo(() => renderArticle(`# ${themeDraft.name || '一篇正在成形的文章'}\n\n${TEMPLATE_PREVIEW_MARKDOWN}`, draftPreviewTheme, typesettingOptions), [draftPreviewTheme, themeDraft.name, typesettingOptions])
+  const draftPreviewHtml = draftPreviewArticle.html
 
   useEffect(() => {
-    const timer = window.setTimeout(() => localStorage.setItem(STORAGE_KEY, markdown), 350)
+    const timer = window.setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, markdown)
+      } catch (error) {
+        console.warn('草稿保存失败，可能是图片占用了过多本地存储空间。', error)
+      }
+    }, 350)
     return () => window.clearTimeout(timer)
   }, [markdown])
+
+  useEffect(() => () => {
+    if (scrollSyncRef.current.frame) window.cancelAnimationFrame(scrollSyncRef.current.frame)
+  }, [])
 
   useEffect(() => {
     localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(customThemes))
   }, [customThemes])
+
+  useEffect(() => {
+    localStorage.setItem(TYPESETTING_OPTIONS_KEY, JSON.stringify(typesettingOptions))
+  }, [typesettingOptions])
 
   const addCustomTheme = (event) => {
     event.preventDefault()
@@ -125,12 +167,15 @@ function App() {
       id: `custom-${Date.now()}`,
       custom: true,
       layout: 'custom-independent',
-      schemaVersion: 1,
+      schemaVersion: 2,
+      sourceTheme: themeDraft.sourceTheme,
       name,
       code: `C${customThemes.length + 1}`,
       description: themeDraft.description.trim() || '我的自定义公众号版式',
       accent,
       accentSoft: mixHex(accent, '#ffffff', .68),
+      underline: `border-bottom:2px solid ${mixHex(accent, '#ffffff', .68)};font-weight:600;`,
+      highlight: mixHex(accent, '#ffffff', .78),
       tint: themeDraft.background.toUpperCase(),
       text: themeDraft.text.toUpperCase(),
       muted: mixHex(themeDraft.text, '#ffffff', .42),
@@ -172,6 +217,75 @@ function App() {
       input.focus()
       input.setSelectionRange(start + before.length, start + before.length + selection.length)
     })
+  }
+
+  const syncScroll = (event, targetRef) => {
+    const source = event.currentTarget
+    const target = targetRef.current
+    if (!target || scrollSyncRef.current.target === source) return
+
+    const sourceRange = source.scrollHeight - source.clientHeight
+    const targetRange = target.scrollHeight - target.clientHeight
+    if (sourceRange <= 0 || targetRange <= 0) return
+
+    if (scrollSyncRef.current.frame) window.cancelAnimationFrame(scrollSyncRef.current.frame)
+    scrollSyncRef.current.target = target
+    target.scrollTop = (source.scrollTop / sourceRange) * targetRange
+    scrollSyncRef.current.frame = window.requestAnimationFrame(() => {
+      scrollSyncRef.current.target = null
+      scrollSyncRef.current.frame = 0
+    })
+  }
+
+  const insertImages = async (files) => {
+    const images = Array.from(files || []).filter((file) => file.type.startsWith('image/'))
+    const input = textareaRef.current
+    if (!images.length || !input) return
+
+    const start = input.selectionStart
+    const end = input.selectionEnd
+
+    try {
+      const imageMarkdown = await Promise.all(images.map((file) => new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const caption = file.name.replace(/\.[^.]+$/, '').replace(/[[\]\\]/g, '\\$&') || '图片'
+          resolve(`![${caption}](${reader.result})`)
+        }
+        reader.onerror = () => reject(reader.error)
+        reader.readAsDataURL(file)
+      })))
+
+      const before = markdown.slice(0, start)
+      const after = markdown.slice(end)
+      const leadingBreak = before && !before.endsWith('\n') ? '\n' : ''
+      const trailingBreak = after && !after.startsWith('\n') ? '\n' : ''
+      const insertion = `${leadingBreak}${imageMarkdown.join('\n\n')}${trailingBreak}`
+      commitMarkdown(`${before}${insertion}${after}`)
+
+      window.requestAnimationFrame(() => {
+        input.focus()
+        const cursor = start + insertion.length
+        input.setSelectionRange(cursor, cursor)
+      })
+    } catch (error) {
+      console.error('图片读取失败。', error)
+      window.alert('图片读取失败，请重新选择图片。')
+    }
+  }
+
+  const handleImagePaste = (event) => {
+    const images = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith('image/'))
+    if (!images.length) return
+    event.preventDefault()
+    insertImages(images)
+  }
+
+  const handleImageDrop = (event) => {
+    const images = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith('image/'))
+    if (!images.length) return
+    event.preventDefault()
+    insertImages(images)
   }
 
   const undo = () => {
@@ -230,6 +344,10 @@ function App() {
     }
   }
 
+  const toggleTypesettingOption = (key) => {
+    setTypesettingOptions((current) => ({ ...current, [key]: !current[key] }))
+  }
+
   return (
     <div className={`app ${isDark ? 'dark' : ''} ${zenMode ? 'zen-mode' : ''}`}>
       <header className="topbar">
@@ -262,7 +380,7 @@ function App() {
           <div className="panel-heading">
             <span className="eyebrow">TEMPLATES</span>
             <h2>选择版式</h2>
-            <p>一篇文章，只用一种气质。</p>
+            <p>原版组件库 · 每套都是完整文章骨架。</p>
           </div>
           <div className="theme-list">
             {templateCards.map((item) => (
@@ -275,7 +393,7 @@ function App() {
                 <ThemeMiniature theme={item} />
                 <span className="theme-card-meta">
                   <span><b>{item.name}</b><em>{item.code}</em></span>
-                  <small>{item.description}</small>
+                  <small>{item.description} · {getSkillStats(item).families} 组组件</small>
                 </span>
                 {item.id === themeId && <span className="theme-check"><Check size={12} /></span>}
               </button>
@@ -310,28 +428,82 @@ function App() {
             <ToolbarButton label="二级标题" icon={Heading2} onClick={() => insertMarkdown('## ', '', '二级标题')} />
             <span />
             <ToolbarButton label="加粗" icon={Sparkles} onClick={() => insertMarkdown('**', '**', '重点文字')} />
+            <ToolbarButton label="高亮" icon={Highlighter} onClick={() => insertMarkdown('==', '==', '高亮文字')} />
+            <ToolbarButton label="下划线" icon={Underline} onClick={() => insertMarkdown('++', '++', '关键短语')} />
             <ToolbarButton label="斜体" icon={Italic} onClick={() => insertMarkdown('*', '*', '强调文字')} />
             <ToolbarButton label="引用" icon={Quote} onClick={() => insertMarkdown('> ', '', '引用内容')} />
             <ToolbarButton label="行内代码" icon={Code2} onClick={() => insertMarkdown('`', '`', 'code')} />
             <span />
             <ToolbarButton label="无序列表" icon={List} onClick={() => insertMarkdown('- ', '', '列表项')} />
             <ToolbarButton label="有序列表" icon={ListOrdered} onClick={() => insertMarkdown('1. ', '', '列表项')} />
-            <ToolbarButton label="图片" icon={Image} onClick={() => insertMarkdown('![', '](https://example.com/image.jpg)', '图片说明')} />
+            <ToolbarButton label="上传图片" icon={Image} onClick={() => imageInputRef.current?.click()} />
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={(event) => {
+                insertImages(event.target.files)
+                event.target.value = ''
+              }}
+            />
+            <ToolbarButton label="表格" icon={Table2} onClick={() => insertMarkdown('\n| 项目 | 说明 |\n| --- | --- |\n| ', ' | 内容 |\n', '名称')} />
             <ToolbarButton label="分割线" icon={Minus} onClick={() => insertMarkdown('\n---\n', '', '')} />
             <span className="toolbar-spacer" />
             <ToolbarButton label="撤销" icon={Undo2} onClick={undo} />
             <ToolbarButton label="重做" icon={Redo2} onClick={redo} />
           </div>
+          <div className="typesetting-bar">
+            <span><BookOpen size={12} /> 智能排版</span>
+            {[
+              ['cover', '封面'],
+              ['introduction', '引言'],
+              ['tableOfContents', '目录'],
+              ['autoKeywords', '关键词'],
+              ['authorCard', '署名'],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className={typesettingOptions[key] ? 'active' : ''}
+                onClick={() => toggleTypesettingOption(key)}
+                aria-pressed={typesettingOptions[key]}
+              >{label}</button>
+            ))}
+            <button
+              type="button"
+              className={`typesetting-settings-toggle ${showTypesettingSettings ? 'active' : ''}`}
+              onClick={() => setShowTypesettingSettings((value) => !value)}
+              aria-label="排版设置"
+            ><Settings2 size={13} /></button>
+          </div>
+          {showTypesettingSettings && (
+            <div className="typesetting-settings">
+              <div className="settings-title"><UserRound size={14} /><span>作者信息与文章细节</span></div>
+              <label><span>作者署名</span><input value={typesettingOptions.author} onChange={(event) => setTypesettingOptions((current) => ({ ...current, author: event.target.value }))} placeholder="留空时自动识别原文署名" /></label>
+              <label><span>一句话简介</span><input value={typesettingOptions.authorBio} onChange={(event) => setTypesettingOptions((current) => ({ ...current, authorBio: event.target.value }))} placeholder="例如：分享 AI 工具与产品观察" /></label>
+              <button type="button" className={typesettingOptions.fullWidthPunctuation ? 'active' : ''} onClick={() => toggleTypesettingOption('fullWidthPunctuation')}>
+                <Check size={12} /> 自动规范中文标点
+              </button>
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             value={markdown}
             onChange={(event) => commitMarkdown(event.target.value)}
+            onScroll={(event) => syncScroll(event, previewStageRef)}
+            onPaste={handleImagePaste}
+            onDragOver={(event) => {
+              if (event.dataTransfer.types.includes('Files')) event.preventDefault()
+            }}
+            onDrop={handleImageDrop}
             className="markdown-input"
             spellCheck="false"
             aria-label="Markdown 编辑器"
           />
           <div className="editor-footer">
-            <span>支持标准 Markdown 与 GFM</span>
+            <span>支持 ==高亮==、++下划线++、GIF 与 GFM 表格</span>
             <span>{markdown.split(/\n/).length} 行 · {charCount.toLocaleString()} 字</span>
           </div>
         </section>
@@ -341,13 +513,14 @@ function App() {
             <div>
               <span className="eyebrow">WECHAT PREVIEW</span>
               <h2>发布预览</h2>
+              <span className="preview-recipe">{article.meta.articleType} · {article.meta.chapterCount} 个章节</span>
             </div>
             <div className="preview-controls">
               <button type="button" className={previewMode === 'phone' ? 'active' : ''} onClick={() => setPreviewMode('phone')} title="手机宽度"><Smartphone size={15} /></button>
               <button type="button" className={previewMode === 'wide' ? 'active' : ''} onClick={() => setPreviewMode('wide')} title="宽屏预览"><Maximize2 size={15} /></button>
             </div>
           </div>
-          <div className="preview-stage">
+          <div className="preview-stage" ref={previewStageRef} onScroll={(event) => syncScroll(event, textareaRef)}>
             <div className={`phone-shell ${previewMode === 'wide' ? 'wide' : ''}`}>
               <div className="phone-chrome">
                 <span>‹</span><b>公众号文章预览</b><span>•••</span>
@@ -355,8 +528,11 @@ function App() {
               <article ref={articleRef} className="article-canvas" dangerouslySetInnerHTML={{ __html: articleHtml }} />
             </div>
           </div>
-          <div className="compatibility-note">
-            <Check size={13} /> 已转换为内联样式富文本 <span>·</span> 可直接粘贴到公众号编辑器
+          <div className={`compatibility-note ${article.meta.validation.passed ? '' : 'has-errors'}`} title={article.meta.validation.errors.join('；')}>
+            <ShieldCheck size={13} />
+            {article.meta.validation.passed ? '公众号兼容校验通过' : '公众号兼容校验未通过'}
+            <span>·</span> {article.meta.keywordCount} 处智能标记
+            <span>·</span> {article.meta.componentStats.templates} 个原版组件
           </div>
         </section>
       </main>
@@ -375,7 +551,7 @@ function App() {
           <form className="theme-creator" onSubmit={addCustomTheme}>
             <div className="creator-heading">
               <span className="creator-icon"><Palette size={19} /></span>
-              <div><span className="eyebrow">NEW TEMPLATE</span><h2>添加一套新模板</h2><p>独立设计组件规则，保存后成为内置六套之外的新模板。</p></div>
+              <div><span className="eyebrow">NEW TEMPLATE</span><h2>添加一套新模板</h2><p>选择完整组件体系，再设计属于自己的文章骨架与视觉语言。</p></div>
               <button type="button" aria-label="关闭" onClick={() => setShowThemeCreator(false)}><X size={18} /></button>
             </div>
 
@@ -383,7 +559,16 @@ function App() {
               <div className="creator-settings">
             <fieldset className="component-designer">
               <legend><span>01</span> 设计模板组件</legend>
-              <p>这组规则将组成一套全新的模板，不依赖任何内置模板。</p>
+              <p>原版组件库提供封面、目录、正文、表格、代码和署名的完整能力。</p>
+
+              <div className="designer-row source-library-row">
+                <label>组件体系</label>
+                <div>{themes.map((sourceTheme) => (
+                  <button type="button" key={sourceTheme.id} className={themeDraft.sourceTheme === sourceTheme.id ? 'active' : ''} onClick={() => setThemeDraft((draft) => ({ ...draft, sourceTheme: sourceTheme.id }))}>
+                    {sourceTheme.name}
+                  </button>
+                ))}</div>
+              </div>
 
               <div className="designer-row">
                 <label>主标题</label>
@@ -442,7 +627,7 @@ function App() {
                     <article dangerouslySetInnerHTML={{ __html: draftPreviewHtml }} />
                   </div>
                 </div>
-                <p><span className="live-pulse" /> 修改左侧选项，文章效果会立即更新</p>
+                <p><span className="live-pulse" /> 已接入 {draftPreviewArticle.meta.componentStats.templates} 个真实组件 · 修改即时生效</p>
               </aside>
             </div>
 

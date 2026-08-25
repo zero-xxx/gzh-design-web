@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "check:components": "python -X utf8 scripts/component_lint.py src/skill",
+    "check:html": "python -X utf8 scripts/validate_gzh_html.py --stdin"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

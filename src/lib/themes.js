@@ -6,6 +6,8 @@ export const themes = [
     description: '教程、清单与工具盘点',
     accent: '#059669',
     accentSoft: '#A7F3D0',
+    underline: 'border-bottom:2px solid #A7F3D0;font-weight:600;',
+    highlight: '#FDE68A',
     tint: '#ECFDF5',
     text: '#1F2937',
     muted: '#6B7280',
@@ -22,6 +24,8 @@ export const themes = [
     description: '观点、深度分析与力量感话题',
     accent: '#DC2626',
     accentSoft: '#FECACA',
+    underline: 'border-bottom:2px solid #FECACA;font-weight:600;',
+    highlight: '#FEE2E2',
     tint: '#FEF2F2',
     text: '#171717',
     muted: '#737373',
@@ -38,6 +42,8 @@ export const themes = [
     description: '设计、科技与专业观点',
     accent: '#52525B',
     accentSoft: '#D4D4D8',
+    underline: 'border-bottom:2px solid #52525B;font-weight:600;',
+    highlight: '#F4F4F5',
     tint: '#F4F4F5',
     text: '#27272A',
     muted: '#71717A',
@@ -54,6 +60,8 @@ export const themes = [
     description: '生活、随笔与安静叙事',
     accent: '#4A5D52',
     accentSoft: '#B5C8BC',
+    underline: 'border-bottom:1.5px solid #B5C8BC;font-weight:500;',
+    highlight: '#E7EEE9',
     tint: '#F3F5F2',
     text: '#303B34',
     muted: '#7A857E',
@@ -70,6 +78,8 @@ export const themes = [
     description: '测评、工具对比与创意清单',
     accent: '#059669',
     accentSoft: '#A7F3D0',
+    underline: 'border-bottom:2px solid #A7F3D0;font-weight:600;',
+    highlight: '#FEF3C7',
     tint: '#F0FDF4',
     text: '#1C1917',
     muted: '#78716C',
@@ -84,8 +94,11 @@ export const themes = [
     name: '橄榄手记',
     code: '06',
     description: '内刊、案例复盘与深度评测',
-    accent: '#6B7456',
-    accentSoft: '#EDC89B',
+    accent: '#1E1F23',
+    accentSoft: '#ED7B2F',
+    underline: 'border-bottom:2px solid #ED7B2F;font-weight:600;',
+    highlight: '#F5D8A8',
+    secondary: '#6B7456',
     tint: '#F3F1E8',
     text: '#1E1F23',
     muted: '#6B6A64',
@@ -99,7 +112,7 @@ export const themes = [
 
 export const defaultMarkdown = `# 把想法，排成一篇好文章
 
-> 真正舒服的阅读，不只来自文字本身，也来自节奏、留白与层次。
+> 真正舒服的阅读，不只来自文字本身，也来自 ==节奏、留白与层次==。
 
 这是一个为微信公众号准备的 **Markdown 排版工作台**。你只需要专注写作，剩下的交给模板。
 
@@ -126,12 +139,22 @@ export const defaultMarkdown = `# 把想法，排成一篇好文章
 
 点击右上角的「复制到公众号」，然后直接粘贴到公众号后台编辑器。
 
+| 排版组件 | 使用方式 | 公众号兼容 |
+| --- | --- | --- |
+| 关键词高亮 | ==重要观点== | 内联样式 |
+| 重点下划线 | ++值得记住++ | span leaf |
+| Markdown 表格 | GFM 表格语法 | 主题表格组件 |
+
 \`\`\`javascript
 const idea = '写作';
 const design = '排版';
 console.log(idea + ' × ' + design);
 \`\`\`
 
+## 写在最后
+
+愿每一个认真写下的想法，都能被舒服地读到。真正好的排版，会让重要内容自然浮现。
+
 ---
 
-愿每一个认真写下的想法，都能被舒服地读到。`
+我是文章作者，热衷于分享认真写作与审美观察。`
